@@ -54,6 +54,8 @@ def direct_download(ep: str) -> None:
     """Plain HTTPS GET per file, following redirects (hf-mirror.com 对海外 IP 会 308 到官方，
     huggingface_hub 不跟跨域重定向；这里兜底)。"""
     import shutil
+    import urllib.error
+    import urllib.parse
     import urllib.request
 
     LOCAL_DIR.mkdir(parents=True, exist_ok=True)
@@ -64,9 +66,21 @@ def direct_download(ep: str) -> None:
         url = f"{ep}/{MODEL_ID}/resolve/main/{f}"
         print(f"[model]   GET {url}", flush=True)
         tmp = dst.with_suffix(dst.suffix + ".part")
-        req = urllib.request.Request(url, headers={"User-Agent": "remake-depth-breakdown"})
-        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as out:
-            shutil.copyfileobj(r, out, 1 << 20)
+        for _hop in range(5):  # Python <3.11 urllib does not follow 308
+            req = urllib.request.Request(url, headers={"User-Agent": "remake-depth-breakdown"})
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as out:
+                    shutil.copyfileobj(r, out, 1 << 20)
+                break
+            except urllib.error.HTTPError as e:
+                loc = e.headers.get("Location")
+                if e.code in (301, 302, 303, 307, 308) and loc:
+                    url = urllib.parse.urljoin(url, loc)
+                    print(f"[model]   → redirect {url}", flush=True)
+                    continue
+                raise
+        else:
+            raise RuntimeError("too many redirects")
         tmp.replace(dst)
 
 
