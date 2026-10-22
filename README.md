@@ -1,6 +1,6 @@
 # 复刻拉片工坊 · remake-depth-breakdown
 
-**版本 1.0.0 · MIT · 给工作室小伙伴开箱即用**
+**版本 1.0.2 · MIT · 给工作室小伙伴开箱即用**
 
 给你一条参考视频，本技能一次交出：
 
@@ -46,7 +46,7 @@ python3 selfcheck.py
 # 4) 对真实参考片一键跑通
 python3 scripts/run_all.py --input /path/to/ref.mp4 --require-real
 # --require-real：真模型加载失败就直接报错，不会悄悄退回 DEMO 深度
-# 首次运行会从 HuggingFace 下载 Depth Anything V2 Small（约 100MB）
+# 首次运行会下载 Depth Anything V2 Small（约 100MB）到 models/；国内网络见下方「国内网络」
 # 实测：12.6s 竖屏 2160×3840 参考片，8 核 CPU 约 2 分钟；GPU / Apple MPS 更快
 # 输出目录：out/<视频名>/
 ```
@@ -68,6 +68,37 @@ out/<stem>/
   prompt_en.txt
   manifest.json
 ```
+
+---
+
+## 国内网络（重要）
+
+实测国内直连 pypi.org 会出现 SSL / 代理断开，HuggingFace 也可能卡住。按下面任一方式：
+
+```bash
+# A. 安装依赖走清华 pip 镜像（不写 URL 默认清华；也可换阿里 https://mirrors.aliyun.com/pypi/simple/）
+python3 install.py --pip-mirror
+#   不加参数时，pypi.org 失败也会自动改用清华镜像重试一次
+
+# B. 预下载深度模型到 models/（先试 huggingface.co，不通自动换 hf-mirror.com）
+python3 scripts/download_model.py --hf-mirror
+#   或一步到位：python3 install.py --pip-mirror --download-model --hf-mirror
+#   也可用环境变量：export HF_ENDPOINT=https://hf-mirror.com
+
+# C. 跑片时也可加 --hf-mirror（models/ 已有模型时完全离线，不联网）
+python3 scripts/run_all.py --input 参考片.mp4 --require-real --hf-mirror
+```
+
+**离线包**：一台电脑下好后，把仓库根目录的 `models/` 文件夹（约 100MB）用 U 盘 / 网盘拷到同事仓库根目录即可，脚本优先读 `models/Depth-Anything-V2-Small-hf/`，无需联网。模型权重不进 Git。
+
+**Linux 无 N 卡**：`python3 install.py --cpu` 会从 download.pytorch.org/whl/cpu 装 CPU 版 torch；该源国内一般可直连，若慢可去掉 `--cpu` 走清华镜像（会装默认版 torch，体积更大）。
+
+### macOS 准备（实测 Apple Silicon）
+
+- `python3`：macOS 自带 3.9 可用；第一次输入 `python3` 若弹窗要装「命令行开发者工具」，点安装即可
+- `ffmpeg`：`brew install ffmpeg`（没有 Homebrew 先装 https://brew.sh ，国内可用镜像脚本）。实在装不了也能跑：install.py 会装 `imageio-ffmpeg` 自带的 ffmpeg
+- Mac 上 install.py 一律装进仓库内 `.venv/`，不会动系统 Python
+- Apple 芯片自动用 `mps` 加速（`depth.json` 里看不到 device 时看终端日志 `on mps`）
 
 ---
 
@@ -111,6 +142,8 @@ scripts/
   extract_audio.py
   breakdown.py
   validate_prompt.py
+  download_model.py # 预下载模型到 models/（国内镜像/离线包）
+models/            # 模型权重（不进 Git，可整体拷贝做离线包）
 docs/
   libtv-manual.md   # 可选：手工挂到 LibTV 的说明（不扣本技能的积分）
 ```

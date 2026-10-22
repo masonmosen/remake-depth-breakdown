@@ -1,7 +1,8 @@
-# 复刻拉片工坊 v1.0.1
-# Python 3.10+ recommended. System ffmpeg must be on PATH.
+# 复刻拉片工坊 v1.0.2
+# Python 3.9+ (macOS 自带 3.9 实测可用). System ffmpeg must be on PATH.
 torch>=2.1.0
 transformers>=4.40.0
+huggingface_hub>=0.23.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 pillow>=10.0.0

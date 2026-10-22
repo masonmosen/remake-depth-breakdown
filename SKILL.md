@@ -2,7 +2,7 @@
 name: 复刻拉片工坊
 description: use when given a reference video to remake — extract depth video, frame-by-frame breakdown, and Seedance-ready prompts (Hermes/any agent; local tools bundled)
 id: remake-depth-breakdown
-version: 1.0.0
+version: 1.0.2
 license: MIT
 ---
 
@@ -20,7 +20,8 @@ license: MIT
 ## 前置
 
 - 系统已安装 `ffmpeg`（或 `pip install imageio-ffmpeg`）
-- Python 3.10+
+- Python 3.9+（macOS 自带可用）
+- 国内网络：`python3 install.py --pip-mirror --download-model --hf-mirror`；模型存于 `models/`，可整体拷贝做离线包；跑片可加 `--hf-mirror`
 - 技能根目录：本仓库克隆路径（下文称 `$SKILL`）
 
 ## 步骤（按顺序）
@@ -80,6 +81,7 @@ python3 scripts/validate_prompt.py --prompt out/<stem>/prompt_en.txt --duration 
 | `scripts/extract_audio.py` | m4a 音轨 |
 | `scripts/breakdown.py` | 切点 + 骨架 + sheets |
 | `scripts/validate_prompt.py` | 时间轴连续性 |
+| `scripts/download_model.py` | 预下载模型到 models/（官方→hf-mirror 自动切换） |
 | `scripts/run_all.py` | 编排以上全部 |
 
 ## 禁止

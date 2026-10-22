@@ -35,16 +35,23 @@ def venv_python(venv: Path) -> str:
     return str(venv / "bin" / "python")
 
 
+TUNA = "https://pypi.tuna.tsinghua.edu.cn/simple"
+PIP_INDEX: list[str] = []  # e.g. ["-i", TUNA]; set by --pip-mirror or auto-retry
+
+
 def ensure_venv(venv: Path) -> str:
     if not venv.exists():
         run([sys.executable, "-m", "venv", str(venv)])
     py = venv_python(venv)
-    run([py, "-m", "pip", "install", "--upgrade", "pip"])
+    try:  # upgrading pip is nice-to-have; never fatal (flaky networks)
+        run([py, "-m", "pip", "install", "--upgrade", "pip", *PIP_INDEX, "--timeout", "60"])
+    except subprocess.CalledProcessError:
+        print("[install] pip self-upgrade skipped (network) — continuing", flush=True)
     return py
 
 
 def pip_install(py: str, pkgs: list[str] | None = None, req: Path | None = None):
-    cmd = [py, "-m", "pip", "install"]
+    cmd = [py, "-m", "pip", "install", *PIP_INDEX, "--timeout", "60", "--retries", "5"]
     if req is not None:
         cmd += ["-r", str(req)]
     else:
@@ -65,10 +72,28 @@ def main():
         action="store_true",
         help="Install CPU-only torch wheel (~200MB instead of multi-GB CUDA build on Linux)",
     )
+    ap.add_argument(
+        "--pip-mirror",
+        nargs="?",
+        const=TUNA,
+        default=None,
+        metavar="URL",
+        help=f"国内 pip 镜像（不写 URL 默认清华 {TUNA}）。不加时 pypi.org 失败也会自动改用清华镜像重试",
+    )
+    ap.add_argument(
+        "--download-model",
+        action="store_true",
+        help="装完顺便把 Depth Anything V2 Small 下到 models/（可离线拷给别人）",
+    )
+    ap.add_argument("--hf-mirror", action="store_true", help="下载模型先走 hf-mirror.com")
     args = ap.parse_args()
+    if args.pip_mirror:
+        PIP_INDEX[:] = ["-i", args.pip_mirror]
+    if sys.version_info < (3, 9):
+        sys.exit(f"Python {sys.version.split()[0]} 太旧，需要 3.9+（macOS: 装 Xcode 命令行工具或 brew install python）")
 
     venv = ROOT / ".venv"
-    use_venv = args.venv or venv.exists()
+    use_venv = args.venv or venv.exists() or sys.platform == "darwin"  # macOS: always venv (no ~/Library pollution)
     py = sys.executable
 
     def do_install(python: str):
@@ -92,13 +117,18 @@ def main():
             py = ensure_venv(venv)
         do_install(py)
     except subprocess.CalledProcessError as e:
-        # PEP 668 externally-managed-environment → auto venv retry
-        print(
-            f"[install] pip failed ({e.returncode}); retrying inside .venv …",
-            flush=True,
-        )
-        py = ensure_venv(venv)
-        do_install(py)
+        # PEP 668 externally-managed / user-site issues → auto venv retry;
+        # if still failing and no mirror set, retry with Tsinghua mirror (国内网络)
+        print(f"[install] pip failed ({e.returncode}); retrying inside .venv …", flush=True)
+        try:
+            py = ensure_venv(venv)
+            do_install(py)
+        except subprocess.CalledProcessError:
+            if PIP_INDEX:
+                raise
+            print(f"[install] still failing → 改用国内镜像 {TUNA} 重试 …", flush=True)
+            PIP_INDEX[:] = ["-i", TUNA]
+            do_install(py)
 
     ff = check_ffmpeg()
     print("\n=== install status ===")
@@ -111,6 +141,12 @@ def main():
         print("  Ubuntu: sudo apt install ffmpeg")
         print("  or: pip install imageio-ffmpeg")
         sys.exit(1)
+
+    if args.download_model and not args.force_demo_only:
+        dl = [py, str(ROOT / "scripts" / "download_model.py")]
+        if args.hf_mirror:
+            dl.append("--hf-mirror")
+        run(dl)
 
     print(
         "\nNext:\n"
