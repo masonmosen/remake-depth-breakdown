@@ -59,6 +59,8 @@ def parse_args() -> argparse.Namespace:
         help="Exit non-zero instead of falling back to DEMO proxy",
     )
     p.add_argument("--meta", default=None, help="Optional JSON sidecar path")
+    p.add_argument("--hf-mirror", action="store_true",
+                   help="模型下载先走国内镜像 hf-mirror.com（也可设 HF_ENDPOINT）")
     return p.parse_args()
 
 
@@ -101,6 +103,14 @@ def probe_timing(path: str, cv_fps: float, cv_n: int):
     import shutil, subprocess
     ff = shutil.which("ffprobe")
     if not ff:
+        # no ffprobe (e.g. only imageio-ffmpeg): count decoded frames for true fps
+        try:
+            import imageio_ffmpeg
+            n, secs = imageio_ffmpeg.count_frames_and_secs(path)
+            if n and secs:
+                return _snap_fps(n / secs), n
+        except Exception:
+            pass
         return cv_fps, cv_n
     try:
         out = subprocess.run(
@@ -125,6 +135,14 @@ def probe_timing(path: str, cv_fps: float, cv_n: int):
     return cv_fps, cv_n
 
 
+def _snap_fps(r: float) -> float:
+    """Snap near-standard rates (count/secs is slightly off, e.g. 24.006)."""
+    for c in (23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60):
+        if abs(r - c) / c < 0.004:
+            return float(c)
+    return r
+
+
 def target_size(w: int, h: int, max_side: int) -> tuple[int, int]:
     if not max_side or max(w, h) <= max_side:
         return w, h
@@ -139,9 +157,13 @@ def load_model(device, force_demo: bool):
         import torch
         from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-        print(f"[depth] loading {MODEL_ID} on {device} …", flush=True)
-        processor = AutoImageProcessor.from_pretrained(MODEL_ID)
-        model = AutoModelForDepthEstimation.from_pretrained(MODEL_ID)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from download_model import ensure_model
+
+        src = str(ensure_model(prefer_mirror=getattr(load_model, "prefer_mirror", False), quiet=True))
+        print(f"[depth] loading {MODEL_ID} from {src} on {device} …", flush=True)
+        processor = AutoImageProcessor.from_pretrained(src)
+        model = AutoModelForDepthEstimation.from_pretrained(src)
         model.eval().to(device)
         return processor, model, BACKEND_REAL, None
     except Exception as e:
@@ -149,8 +171,7 @@ def load_model(device, force_demo: bool):
         print(
             "[depth] WARNING: Depth Anything load failed — falling back to "
             f"DEMO luminosity proxy.\n         reason: {msg}\n"
-            "         Re-run with network + `pip install -r requirements.txt` "
-            "for real depth.",
+            "         国内网络试：--hf-mirror 或先跑 python3 scripts/download_model.py --hf-mirror",
             flush=True,
         )
         return None, None, BACKEND_DEMO, msg
@@ -246,6 +267,7 @@ def extract(args) -> dict:
     if start > 0:
         cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000.0)
 
+    load_model.prefer_mirror = bool(getattr(args, "hf_mirror", False))
     device = None
     processor = model = None
     backend = BACKEND_DEMO
@@ -316,6 +338,7 @@ def extract(args) -> dict:
         "far": "black",
         "audio": False,
         "model_id": MODEL_ID if backend == BACKEND_REAL else None,
+        "device": str(device) if backend == BACKEND_REAL else None,
     }
 
     segments = []

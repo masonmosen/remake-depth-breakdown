@@ -77,6 +77,8 @@ def main():
         print("[selfcheck] SELFCHECK_FORCE_DEMO=1 → demo proxy (set 0 to try real model)")
     else:
         cmd.append("--require-real")
+        if "--hf-mirror" in sys.argv or os.environ.get("HF_MIRROR") == "1":
+            cmd.append("--hf-mirror")
         print("[selfcheck] SELFCHECK_FORCE_DEMO=0 → REAL Depth Anything V2 required")
 
     r = subprocess.run(cmd)

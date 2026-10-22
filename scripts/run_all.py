@@ -85,6 +85,7 @@ def parse_args():
     p.add_argument("--device", default="auto")
     p.add_argument("--split-max", type=float, default=15.0, help="Depth segment length; 0=off")
     p.add_argument("--force-demo", action="store_true")
+    p.add_argument("--hf-mirror", action="store_true", help="模型下载先走 hf-mirror.com（国内网络）")
     p.add_argument(
         "--require-real",
         action="store_true",
@@ -127,6 +128,8 @@ def main():
         depth_cmd += ["--split-max", str(args.split_max)]
     if args.force_demo:
         depth_cmd.append("--force-demo")
+    if getattr(args, "hf_mirror", False):
+        depth_cmd.append("--hf-mirror")
     if args.require_real:
         depth_cmd.append("--require-real")
     run(depth_cmd)
