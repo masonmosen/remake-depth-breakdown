@@ -2,6 +2,16 @@
 """One-shot: depth + audio + breakdown + prompt stubs → out/<stem>/."""
 from __future__ import annotations
 
+# --- auto-use bundled .venv (install.py may have created it) ---
+import os as _os, sys as _sys
+from pathlib import Path as _P
+_VENV = _P(__file__).resolve().parent.parent / ".venv"
+_VPY = _VENV / ("Scripts/python.exe" if _os.name == "nt" else "bin/python")
+if _VPY.exists() and _P(_sys.prefix).resolve() != _VENV.resolve() and not _os.environ.get("RDB_NO_VENV_REEXEC"):
+    _os.environ["RDB_NO_VENV_REEXEC"] = "1"
+    _os.execv(str(_VPY), [str(_VPY), *_sys.argv])
+# ---------------------------------------------------------------
+
 import argparse
 import json
 import subprocess
@@ -75,6 +85,11 @@ def parse_args():
     p.add_argument("--device", default="auto")
     p.add_argument("--split-max", type=float, default=15.0, help="Depth segment length; 0=off")
     p.add_argument("--force-demo", action="store_true")
+    p.add_argument(
+        "--require-real",
+        action="store_true",
+        help="Fail loudly if Depth Anything V2 cannot load (no DEMO fallback)",
+    )
     return p.parse_args()
 
 
@@ -112,6 +127,8 @@ def main():
         depth_cmd += ["--split-max", str(args.split_max)]
     if args.force_demo:
         depth_cmd.append("--force-demo")
+    if args.require_real:
+        depth_cmd.append("--require-real")
     run(depth_cmd)
 
     audio_cmd = [
@@ -172,6 +189,7 @@ def main():
             "depth_json": str(out / "depth.json"),
         },
         "depth_backend": depth_meta.get("backend"),
+        "depth_segments": depth_meta.get("segments", []),
         "next_steps": [
             "If your model can SEE images: open sheets/*.png, fill prompt_zh.txt and prompt_en.txt from t=0.",
             f"python scripts/validate_prompt.py --prompt {zh} --duration {duration:.2f}",
@@ -183,6 +201,11 @@ def main():
     )
     print("\n=== 复刻拉片工坊 done ===")
     print(f"outdir: {out}")
+    if depth_meta.get("backend") != "depth-anything-v2-small":
+        print("!! WARNING: depth.mp4 is DEMO proxy, NOT real depth — do not use for production."
+              f" reason: {depth_meta.get('demo_fallback_reason')}")
+    for sg in depth_meta.get("segments", []):
+        print(f"segment: {sg['path']}  {sg['start_sec']}→{sg['end_sec']}s")
     print(f"depth backend: {manifest['depth_backend']}")
     print(f"duration: {duration:.2f}s")
     print("NEXT: vision model fills prompts → validate_prompt.py")

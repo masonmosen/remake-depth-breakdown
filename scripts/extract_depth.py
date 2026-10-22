@@ -8,6 +8,16 @@ Near = white, far = black. No audio. Temporal median smooth.
 """
 from __future__ import annotations
 
+# --- auto-use bundled .venv (install.py may have created it) ---
+import os as _os, sys as _sys
+from pathlib import Path as _P
+_VENV = _P(__file__).resolve().parent.parent / ".venv"
+_VPY = _VENV / ("Scripts/python.exe" if _os.name == "nt" else "bin/python")
+if _VPY.exists() and _P(_sys.prefix).resolve() != _VENV.resolve() and not _os.environ.get("RDB_NO_VENV_REEXEC"):
+    _os.environ["RDB_NO_VENV_REEXEC"] = "1"
+    _os.execv(str(_VPY), [str(_VPY), *_sys.argv])
+# ---------------------------------------------------------------
+
 import argparse
 import json
 import math
@@ -43,6 +53,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip model download; use DEMO luminosity proxy",
     )
+    p.add_argument(
+        "--require-real",
+        action="store_true",
+        help="Exit non-zero instead of falling back to DEMO proxy",
+    )
     p.add_argument("--meta", default=None, help="Optional JSON sidecar path")
     return p.parse_args()
 
@@ -72,7 +87,42 @@ def open_capture(path: str):
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    fps, n = probe_timing(path, fps, n)
     return cap, fps, w, h, n
+
+
+def probe_timing(path: str, cv_fps: float, cv_n: int):
+    """Return (fps, nframes) robust to bad container avg_frame_rate.
+
+    OpenCV reports avg_frame_rate, which some phone/app exports get wrong
+    (e.g. 23.685 for a true 24 fps clip) → depth drifts vs original.
+    Prefer ffprobe r_frame_rate when it agrees with frame count/duration.
+    """
+    import shutil, subprocess
+    ff = shutil.which("ffprobe")
+    if not ff:
+        return cv_fps, cv_n
+    try:
+        out = subprocess.run(
+            [ff, "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "stream=r_frame_rate,nb_frames:format=duration", "-of", "json", path],
+            capture_output=True, text=True, timeout=30,
+        ).stdout
+        j = json.loads(out)
+        st = j["streams"][0]
+        num, den = st["r_frame_rate"].split("/")
+        r = float(num) / float(den)
+        n = int(st.get("nb_frames") or cv_n or 0)
+        dur = float(j["format"]["duration"])
+        if r > 0 and 1 <= r <= 240:
+            if n and dur and abs(n / r - dur) <= max(2.0 / r, 0.1):
+                return r, n
+            if n and dur:
+                return n / dur, n
+            return r, n
+    except Exception:
+        pass
+    return cv_fps, cv_n
 
 
 def target_size(w: int, h: int, max_side: int) -> tuple[int, int]:
@@ -137,11 +187,14 @@ def normalize_stack(stack: np.ndarray) -> np.ndarray:
     """Temporal median (k=3) then percentile stretch → uint8 near=white."""
     if len(stack) == 0:
         return stack.astype(np.uint8)
+    stack = stack.astype(np.float32)
     smoothed = stack.copy()
     if len(stack) >= 3:
         for i in range(1, len(stack) - 1):
             smoothed[i] = np.median(stack[i - 1 : i + 2], axis=0)
     flat = smoothed.reshape(-1)
+    if flat.size > 4_000_000:
+        flat = flat[:: flat.size // 4_000_000 + 1]
     lo, hi = np.percentile(flat, 1), np.percentile(flat, 99)
     if hi <= lo:
         hi = lo + 1.0
@@ -210,6 +263,12 @@ def extract(args) -> dict:
     else:
         fail_reason = "forced --force-demo"
 
+    if backend != BACKEND_REAL and getattr(args, "require_real", False):
+        raise SystemExit(
+            "[depth] FATAL: --require-real set but Depth Anything V2 unavailable: "
+            f"{fail_reason}"
+        )
+
     depths = []
     raw_frames = 0
     t = start
@@ -226,7 +285,7 @@ def extract(args) -> dict:
             d = infer_real(processor, model, device, frame)
         else:
             d = infer_demo(frame)
-        depths.append(d.astype(np.float32))
+        depths.append(d.astype(np.float16))
         raw_frames += 1
         if raw_frames % 30 == 0:
             print(f"[depth] {raw_frames} frames @ t={t:.2f}s ({backend})", flush=True)

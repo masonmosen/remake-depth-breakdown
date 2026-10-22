@@ -5,9 +5,20 @@ Descriptions are LEFT EMPTY for a vision-capable agent to fill.
 """
 from __future__ import annotations
 
+# --- auto-use bundled .venv (install.py may have created it) ---
+import os as _os, sys as _sys
+from pathlib import Path as _P
+_VENV = _P(__file__).resolve().parent.parent / ".venv"
+_VPY = _VENV / ("Scripts/python.exe" if _os.name == "nt" else "bin/python")
+if _VPY.exists() and _P(_sys.prefix).resolve() != _VENV.resolve() and not _os.environ.get("RDB_NO_VENV_REEXEC"):
+    _os.environ["RDB_NO_VENV_REEXEC"] = "1"
+    _os.execv(str(_VPY), [str(_VPY), *_sys.argv])
+# ---------------------------------------------------------------
+
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 
 import cv2
@@ -51,6 +62,38 @@ def detect_scenes(path: str, start: float | None, end: float | None):
         return []
 
 
+def change_candidates(path: str, fps: float, top: int = 12, min_gap: float = 0.4):
+    """Soft transitions (wipes, occlusion, outfit swaps) that ContentDetector misses.
+
+    Per-frame mean abs diff on 64px gray thumbnails; returns peak times (s)
+    above mean+2*std. Candidates only — a vision model must confirm.
+    """
+    cap = cv2.VideoCapture(path)
+    prev = None
+    diffs = []
+    while True:
+        ok, f = cap.read()
+        if not ok:
+            break
+        g = cv2.resize(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY), (36, 64)).astype(np.float32)
+        diffs.append(0.0 if prev is None else float(np.abs(g - prev).mean()))
+        prev = g
+    cap.release()
+    if len(diffs) < 3:
+        return []
+    d = np.array(diffs)
+    thr = d.mean() + 2 * d.std()
+    idx = [i for i in np.argsort(-d) if d[i] > thr]
+    picked = []
+    for i in idx:
+        t = i / fps
+        if all(abs(t - p) >= min_gap for p in picked):
+            picked.append(t)
+        if len(picked) >= top:
+            break
+    return sorted(round(t, 2) for t in picked)
+
+
 def video_meta(path: str):
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
@@ -59,8 +102,14 @@ def video_meta(path: str):
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    dur = n / fps if n else 0.0
     cap.release()
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from extract_depth import probe_timing
+        fps, n = probe_timing(path, fps, n)
+    except Exception:
+        pass
+    dur = n / fps if n else 0.0
     return fps, n, w, h, dur
 
 
@@ -124,6 +173,10 @@ def main():
     duration = max(0.0, end - start)
 
     scenes = detect_scenes(args.input, start, end)
+    if len(scenes) <= 1:
+        scenes = []
+    pseudo = not scenes
+    candidates = [t for t in change_candidates(args.input, fps) if start <= t <= end]
     if not scenes:
         # 1-second pseudo scenes
         t = start
@@ -146,6 +199,8 @@ def main():
             sample.add(round(s + 0.5, 2))
     for a, b in scenes:
         sample.add(round((a + b) / 2.0, 2))
+    for c in candidates:
+        sample.add(round(c, 2))
     sample_times = sorted(x for x in sample if start <= x <= end)
 
     sheet_paths = make_sheets(args.input, sample_times, sheets_dir, args.cols, args.thumb_w)
@@ -183,7 +238,10 @@ def main():
         "",
         f"- 时长: **{duration:.2f}s** (window {start:.2f}→{end:.2f})",
         f"- 分辨率: {w}×{h} @ {fps:.2f} fps",
-        f"- 场景切点: {len(scenes)}",
+        f"- 场景切点: {len(scenes)}"
+        + ("（未检测到硬切，下表为 1 秒网格，不是真实镜头）" if pseudo else ""),
+        "- 软转场/变化候选（遮挡、擦除、换装等，需看图确认）: "
+        + (", ".join(f"{c:.2f}s" for c in candidates) or "无"),
         f"- 缩略图拼图: {len(sheet_paths)} 张 → `sheets/`",
         "",
         "## 重要",
@@ -222,6 +280,8 @@ def main():
         "fps": fps,
         "size": [w, h],
         "scenes": len(scenes),
+        "scenes_are_pseudo_1s_grid": pseudo,
+        "change_candidates_sec": candidates,
         "seconds": seconds,
         "sheets": sheet_paths,
         "timeline_csv": str(csv_path),

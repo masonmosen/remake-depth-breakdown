@@ -2,6 +2,16 @@
 """Extract reference audio (AAC/M4A) with ffmpeg for Seedance mixed mode."""
 from __future__ import annotations
 
+# --- auto-use bundled .venv (install.py may have created it) ---
+import os as _os, sys as _sys
+from pathlib import Path as _P
+_VENV = _P(__file__).resolve().parent.parent / ".venv"
+_VPY = _VENV / ("Scripts/python.exe" if _os.name == "nt" else "bin/python")
+if _VPY.exists() and _P(_sys.prefix).resolve() != _VENV.resolve() and not _os.environ.get("RDB_NO_VENV_REEXEC"):
+    _os.environ["RDB_NO_VENV_REEXEC"] = "1"
+    _os.execv(str(_VPY), [str(_VPY), *_sys.argv])
+# ---------------------------------------------------------------
+
 import argparse
 import json
 import shutil
