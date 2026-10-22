@@ -1,0 +1,10 @@
+# 复刻拉片工坊 v1.0.0
+# Python 3.10+ recommended. System ffmpeg must be on PATH.
+torch>=2.1.0
+transformers>=4.40.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+scenedetect>=0.6.3
+# imageio-ffmpeg is optional; prefer system ffmpeg (checked by install.py)
+imageio-ffmpeg>=0.4.9
