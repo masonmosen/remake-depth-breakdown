@@ -1,4 +1,4 @@
-# 复刻拉片工坊 v1.0.2
+# 复刻拉片工坊 v1.0.3
 # Python 3.9+ (macOS 自带 3.9 实测可用). System ffmpeg must be on PATH.
 torch>=2.1.0
 transformers>=4.40.0

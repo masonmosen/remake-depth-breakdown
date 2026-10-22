@@ -2,7 +2,7 @@
 name: 复刻拉片工坊
 description: use when given a reference video to remake — extract depth video, frame-by-frame breakdown, and Seedance-ready prompts (Hermes/any agent; local tools bundled)
 id: remake-depth-breakdown
-version: 1.0.2
+version: 1.0.3
 license: MIT
 ---
 

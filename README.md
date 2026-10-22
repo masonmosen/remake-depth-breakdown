@@ -1,6 +1,6 @@
 # 复刻拉片工坊 · remake-depth-breakdown
 
-**版本 1.0.2 · MIT · 给工作室小伙伴开箱即用**
+**版本 1.0.3 · MIT · 给工作室小伙伴开箱即用**
 
 给你一条参考视频，本技能一次交出：
 
@@ -28,6 +28,8 @@
 
 ```bash
 # 1) 系统需已安装 ffmpeg（macOS: brew install ffmpeg / Ubuntu: sudo apt install ffmpeg）
+
+> **共享盘版本说明**：如果你是从组内共享盘整包复制的本文件夹，`models/Depth-Anything-V2-Small-hf/` 已预先下载好（约 99MB），整个文件夹复制到本机任意位置即可离线运行，无需再执行 download_model.py。
 git clone https://github.com/masonmosen/remake-depth-breakdown.git
 cd remake-depth-breakdown
 
