@@ -60,6 +60,11 @@ def main():
         action="store_true",
         help="Skip torch/transformers (light install for offline selfcheck)",
     )
+    ap.add_argument(
+        "--cpu",
+        action="store_true",
+        help="Install CPU-only torch wheel (~200MB instead of multi-GB CUDA build on Linux)",
+    )
     args = ap.parse_args()
 
     venv = ROOT / ".venv"
@@ -77,6 +82,9 @@ def main():
             ]
             pip_install(python, pkgs=pkgs)
         else:
+            if args.cpu:
+                run([python, "-m", "pip", "install", "torch",
+                     "--index-url", "https://download.pytorch.org/whl/cpu"])
             pip_install(python, req=ROOT / "requirements.txt")
 
     try:

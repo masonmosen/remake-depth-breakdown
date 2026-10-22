@@ -34,6 +34,9 @@ cd remake-depth-breakdown
 # 2) 安装 Python 依赖（系统 Python 受限时会自动建 .venv）
 python3 install.py
 # 或显式：python3 install.py --venv
+# Linux 无 N 卡建议加 --cpu（装 CPU 版 torch，约 200MB；否则会拉几 GB 的 CUDA 包）
+# python3 install.py --venv --cpu
+# 装完后照常用 python3 运行即可：脚本检测到 .venv 会自动切换进去
 # 离线自检轻量安装：
 # python3 install.py --force-demo-only
 
@@ -41,7 +44,10 @@ python3 install.py
 python3 selfcheck.py
 
 # 4) 对真实参考片一键跑通
-python3 scripts/run_all.py --input /path/to/ref.mp4
+python3 scripts/run_all.py --input /path/to/ref.mp4 --require-real
+# --require-real：真模型加载失败就直接报错，不会悄悄退回 DEMO 深度
+# 首次运行会从 HuggingFace 下载 Depth Anything V2 Small（约 100MB）
+# 实测：12.6s 竖屏 2160×3840 参考片，8 核 CPU 约 2 分钟；GPU / Apple MPS 更快
 # 输出目录：out/<视频名>/
 ```
 
@@ -51,6 +57,8 @@ python3 scripts/run_all.py --input /path/to/ref.mp4
 out/<stem>/
   depth.mp4          # 近白远黑，无音轨；真模型或 DEMO 代理
   depth.json         # 记录用了 Depth Anything 还是 DEMO
+  depth_seg01.mp4…   # 片长 >15s 时自动切的 ≤15s 分段（Seedance 单条上限）
+  manifest.json      # 全部产物路径 + depth_segments
   ref_audio.m4a
   breakdown.md       # 拉片骨架（描述列为空）
   timeline.csv

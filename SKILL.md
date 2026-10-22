@@ -30,7 +30,7 @@ license: MIT
 ```bash
 cd "$SKILL"
 python3 install.py
-# 可选：python3 install.py --venv
+# 可选：python3 install.py --venv   （Linux 无 GPU 加 --cpu）
 # 离线轻量：python3 install.py --force-demo-only
 python3 selfcheck.py
 ```
@@ -38,9 +38,11 @@ python3 selfcheck.py
 ### 2. 一键产物
 
 ```bash
-python3 scripts/run_all.py --input /path/to/ref.mp4
+python3 scripts/run_all.py --input /path/to/ref.mp4 --require-real
 # 可选：--start 0 --end 12 --max-side 720 --device auto --split-max 15
-# 离线强制 DEMO 深度：加 --force-demo
+# 离线强制 DEMO 深度：加 --force-demo（与 --require-real 二选一）
+# 注意：吊扇遮挡/擦除式换装不是硬切，镜头检测会给 1 秒网格；
+#       breakdown.md 里的「软转场候选」时间点要对照 sheets 确认
 ```
 
 默认输出：`$SKILL/out/<stem>/`，含 `depth.mp4`、`ref_audio.m4a`、`breakdown.md`、`timeline.csv`、`sheets/`、`prompt_zh.txt`、`prompt_en.txt`、`manifest.json`。

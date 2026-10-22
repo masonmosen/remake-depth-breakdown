@@ -2,6 +2,16 @@
 """Generate a 2s synthetic clip and run extract_depth + breakdown. CPU OK."""
 from __future__ import annotations
 
+# --- auto-use bundled .venv (install.py may have created it) ---
+import os as _os, sys as _sys
+from pathlib import Path as _P
+_VENV = _P(__file__).resolve().parent / ".venv"
+_VPY = _VENV / ("Scripts/python.exe" if _os.name == "nt" else "bin/python")
+if _VPY.exists() and _P(_sys.prefix).resolve() != _VENV.resolve() and not _os.environ.get("RDB_NO_VENV_REEXEC"):
+    _os.environ["RDB_NO_VENV_REEXEC"] = "1"
+    _os.execv(str(_VPY), [str(_VPY), *_sys.argv])
+# ---------------------------------------------------------------
+
 import json
 import subprocess
 import sys
@@ -65,6 +75,9 @@ def main():
     if os.environ.get("SELFCHECK_FORCE_DEMO", "1") == "1":
         cmd.append("--force-demo")
         print("[selfcheck] SELFCHECK_FORCE_DEMO=1 → demo proxy (set 0 to try real model)")
+    else:
+        cmd.append("--require-real")
+        print("[selfcheck] SELFCHECK_FORCE_DEMO=0 → REAL Depth Anything V2 required")
 
     r = subprocess.run(cmd)
     if r.returncode != 0:
